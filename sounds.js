@@ -8,7 +8,7 @@
 const SOUND_LIST = {
   // In the game now
   whoosh:      { file: "jungle_basket_whoosh",   gain: 1.6 },
-  pop:         { file: "jungle_counting_pop",    gain: 0.6 },
+  pop:         { file: "jungle_counting_pop",    gain: 0.15 },
   tap:         { file: "jungle_tile_tap",        gain: 0.8 },
   correct:     { file: "jungle_correct_marimba", gain: 1.3 },
   tryAgain:    { file: "jungle_try_again",       gain: 1.0 },
@@ -18,6 +18,12 @@ const SOUND_LIST = {
 
   // One seamless loop per level, cut by tools/cut_music.py. The last level's loop continues
   // for any level after it. The volume is shared, so the track's natural build-up stays.
+
+  toucanHop:   { file: "jungle_toucan_hop",      gain: 0.7 },
+  toucanMunch: { file: "jungle_toucan_munch",    gain: 1.0 },
+  toucanMiss:  { file: "jungle_toucan_miss",     gain: 0.6 },
+  leaf:        { file: "jungle_leaf_flutter",    gain: 2.0 },
+  yawn:        { file: "jungle_monkey_yawn",     gain: 0.6 },
 
   // Silent placeholders for now
   levelUp:     { file: "jungle_level_complete",  gain: 1.0 },

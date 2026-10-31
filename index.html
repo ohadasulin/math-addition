@@ -23,6 +23,12 @@
 
   <div id="score"><img src="img/badge.webp" alt=""><span id="count">0</span></div>
   <div id="plus">+1</div>
+  <div id="leaves" aria-label="Lucky leaves"></div>
+  <div id="track" class="off">
+    <img id="branch" src="img/branch.webp" alt="">
+    <img id="trackBanana" src="img/banana.webp" alt="">
+    <div id="runner"><img id="runnerPose" src="img/toucan_hop.webp" alt="Hungry toucan"></div>
+  </div>
 
   <div id="sign">
     <i class="rope l"></i><i class="rope r"></i>
@@ -58,7 +64,16 @@
     <button id="toggleMusic" class="wood small"></button>
     <button id="toggleSfx" class="wood small"></button>
     <button id="toggleVoice" class="wood small"></button>
+    <button id="toggleRelaxed" class="wood small"></button>
+    <button id="toggleFast" class="wood small"></button>
     <button class="wood small startOver">Start over</button>
+  </section>
+
+  <section id="nap" class="overlay" hidden>
+    <img class="nap-monkey" src="img/monkey_nap.webp" alt="The monkey is napping">
+    <div class="board"><img src="img/banner.webp" alt=""><h2>Nap time!</h2></div>
+    <p class="nap-text">Let's try that again!</p>
+    <button id="wakeUp" class="wood">Wake up!</button>
   </section>
 
   <section id="levelup" class="overlay" hidden>

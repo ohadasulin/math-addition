@@ -17,6 +17,17 @@ const CONFIG = {
   fruits: ["fruit_orange"],   // add e.g. "fruit_apple" once img/fruit_apple.webp exists
 };
 
+// Seconds for each question (null = no toucan) and lucky leaves, by level.
+const LEVEL_RULES = [
+  [null, 6], [null, 6], [12, 6], [12, 6], [12, 6], [12, 5], [12, 5],
+  [12, 5], [12, 5], [14, 4], [14, 4], [16, 3], [14, 2],
+].map(([seconds, leaves]) => ({ seconds, leaves }));
+const rules = () => LEVEL_RULES[Math.min(state.level, LEVEL_RULES.length) - 1];
+const CHECKPOINT = 4;        // a nap never drops the bar below this once it's reached
+const EASED_EXTRA_SECONDS = 5;
+const TOUCAN_HOPS = 12;
+const TOUCAN_ROAD = 860;     // pixels from the start of the branch to the banana
+
 // Each level adds one idea. Every entry returns [a, b]; `gentle` means the smallest version.
 const twoDigitNoCarry = (gentle) => {
   const tensA = randInt(1, gentle ? 2 : 6), tensB = randInt(1, gentle ? 1 : 8 - tensA);
@@ -83,8 +94,10 @@ const state = {
   bananas: 0, level: 1, progress: 0,
   busy: true, paused: false, round: null, last: "",
   roundNo: 0, levelRounds: 0, wrongStreak: 0, easyLeft: 0, retry: [],
+  leaves: 0, relaxed: false, introShown: false,
 };
 try {
+  state.relaxed = localStorage.getItem("jm-relaxed") === "yes";
   const saved = JSON.parse(localStorage.getItem("jm-progress") || "{}");
   for (const k of ["bananas", "level", "progress"]) if (Number.isFinite(saved[k])) state[k] = saved[k];
 } catch {}
@@ -108,6 +121,12 @@ function wait(ms) {
   });
 }
 
+// Fast mode, switched from the pause screen: speeds up question starts and misses.
+// Adding ?fast to the address also turns it on.
+let fastMode = new URLSearchParams(location.search).has("fast");
+try { fastMode = fastMode || localStorage.getItem("jm-fast") === "yes"; } catch {}
+const quick = (ms) => wait(fastMode ? ms * 0.15 : ms);
+
 const makesCrate = (a, b) => state.level >= CONFIG.cratesFromLevel && a % 10 + b % 10 >= 10;
 
 // Right answer plus two wrong ones. Bigger numbers use the mistakes kids really make.
@@ -129,10 +148,11 @@ function answerChoices(a, b) {
 
 function pickRound() {
   state.roundNo++;
+  const eased = state.easyLeft > 0;
   const due = state.retry.findIndex((q) => q.due <= state.roundNo);
   if (due >= 0) {
     const [{ a, b }] = state.retry.splice(due, 1);
-    return { a, b, answer: a + b, options: answerChoices(a, b) };
+    return { a, b, eased, answer: a + b, options: answerChoices(a, b) };
   }
   const top = Math.min(state.level, LEVELS.length);
   let from = top, gentle = false;
@@ -149,8 +169,10 @@ function pickRound() {
   let a, b, tries = 0;
   do { [a, b] = LEVELS[from - 1](gentle); } while (`${a}+${b}` === state.last && ++tries < 20);
   state.last = `${a}+${b}`;
-  return { a, b, answer: a + b, options: answerChoices(a, b) };
+  return { a, b, eased, answer: a + b, options: answerChoices(a, b) };
 }
+
+document.documentElement.classList.toggle("fast", fastMode);
 
 function fitStage() {
   $("stage").style.transform = `scale(${Math.min(innerWidth / 1448, innerHeight / 1086)})`;
@@ -169,6 +191,97 @@ function renderHud() {
   const seg = $("segments");
   if (!seg.children.length) seg.innerHTML = "<i></i>".repeat(CONFIG.firstTryToFinishLevel);
   [...seg.children].forEach((el, i) => el.classList.toggle("on", i < state.progress));
+}
+
+const LEAF_SVG = `<svg class="leaf" viewBox="0 0 36 50" aria-hidden="true"><defs><linearGradient id="leafG" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#a6e23a"/><stop offset="1" stop-color="#3f9a1c"/></linearGradient></defs><path d="M18 2C31 11 34 28 18 48C2 28 5 11 18 2Z" fill="url(#leafG)" stroke="#23620f" stroke-width="2"/><path d="M18 5V44M18 18L26 12M18 18L10 12M18 30L25 24M18 30L11 24" fill="none" stroke="#2c7a15" stroke-width="1.6"/></svg>`;
+
+// Leaves, the toucan's branch, and which toucan is on screen.
+function renderChallenge() {
+  const total = rules().leaves;
+  $("leaves").hidden = state.relaxed;
+  $("leaves").style.display = state.relaxed ? "none" : "";
+  $("leaves").innerHTML = LEAF_SVG.repeat(total);
+  [...$("leaves").children].forEach((leaf, i) => leaf.classList.toggle("lost", i >= state.leaves));
+  const racing = !state.relaxed && !!rules().seconds;
+  $("track").classList.toggle("off", !racing);
+  $("toucan").style.display = racing ? "none" : "";
+}
+
+function loseLeaf() {
+  if (state.relaxed) return;
+  state.leaves--;
+  const leaf = $("leaves").children[state.leaves];
+  if (leaf) leaf.classList.add("fall");
+  Sound.play("leaf");
+}
+
+function resetToucan() {
+  $("runnerPose").src = "img/toucan_hop.webp";
+  $("runner").style.transition = "none";
+  $("runner").style.transform = "none";
+  void $("runner").offsetWidth;
+  $("runner").style.transition = "";
+  $("trackBanana").classList.remove("gone");
+}
+
+let timer = null;
+
+function stopTimer() {
+  if (timer) clearInterval(timer.id);
+  const fraction = timer ? timer.fraction : 0;
+  timer = null;
+  return fraction;
+}
+
+// The toucan hops toward the banana. Only unpaused time counts.
+function startTimer(r) {
+  const seconds = rules().seconds;
+  if (state.relaxed || !seconds) return;
+  const total = (seconds + (r.eased ? EASED_EXTRA_SECONDS : 0)) * 1000;
+  let elapsed = 0, prev = performance.now(), hop = 0;
+  const id = setInterval(() => {
+    const now = performance.now();
+    if (!state.paused) elapsed += now - prev;
+    prev = now;
+    timer.fraction = elapsed / total;
+    const reached = Math.min(TOUCAN_HOPS, Math.floor(timer.fraction * TOUCAN_HOPS));
+    if (reached <= hop) return;
+    hop = reached;
+    $("runner").style.transform = `translateX(${hop / TOUCAN_HOPS * TOUCAN_ROAD}px)`;
+    $("runnerPose").animate([{ transform: "none" }, { transform: "translateY(-30px)" }, { transform: "none" }], 320);
+    Sound.play("toucanHop");
+    if (hop === TOUCAN_HOPS) timeUp(r);
+  }, 100);
+  timer = { id, fraction: 0 };
+}
+
+function noteMiss(r) {
+  if (r.missed) return;
+  r.missed = true;
+  state.retry.push({ a: r.a, b: r.b, due: state.roundNo + randInt(3, 4) });
+  if (++state.wrongStreak >= CONFIG.wrongInARowToEase) {
+    state.wrongStreak = 0;
+    state.easyLeft = CONFIG.easyRounds;
+  }
+}
+
+// The toucan reaches the banana: same as a miss, with a snack.
+async function timeUp(r) {
+  stopTimer();
+  state.busy = true;
+  noteMiss(r);
+  $("runnerPose").src = "img/toucan_eat.webp";
+  $("trackBanana").classList.add("gone");
+  Sound.play("toucanMunch");
+  loseLeaf();
+  await revealAndMoveOn(r);
+}
+
+function napTime() {
+  $("monkey").style.visibility = "hidden";
+  $("pack").innerHTML = "";
+  $("nap").hidden = false;
+  Sound.play("yawn");
 }
 
 function setProblem(a, b, result) {
@@ -316,7 +429,11 @@ async function startRound() {
   $("tiles").innerHTML = "";
   $("pack").innerHTML = "";
   setMonkey("think");
-  if (state.level === CONFIG.cratesFromLevel && state.levelRounds === 0) await crateIntro();
+  resetToucan();
+  if (state.level === CONFIG.cratesFromLevel && !state.introShown && !fastMode) {
+    state.introShown = true;
+    await crateIntro();
+  }
 
   const r = state.round = pickRound();
   const fruit = pick(CONFIG.fruits);
@@ -327,16 +444,17 @@ async function startRound() {
   $("basketL").classList.add("fly");
   $("basketR").classList.add("fly");
   Sound.play("whoosh");
-  await wait(980);
+  await quick(980);
   for (const id of ["basketL", "basketR"]) { $(id).classList.remove("fly"); $(id).classList.add("landed"); }
 
   const items = [...sideItems(".crate"), ...sideItems(".fruit")];
   const gap = items.length > 10 ? 90 : 170;
-  for (let i = 0; i < items.length; i++) { popItem(items[i], i); await wait(gap); }
+  for (let i = 0; i < items.length; i++) { popItem(items[i], i); await quick(gap); }
   Sound.say([`n${r.a}`, "plus", `n${r.b}`]);
   showTiles(r.options);
-  await wait(300);
+  await quick(300);
   state.busy = false;
+  startTimer(r);
 }
 
 function bubble(el, value) {
@@ -355,58 +473,59 @@ async function packFromBaskets(r) {
   return packCrate(sideItems(".fruit").slice(0, 10));
 }
 
-// After a wrong answer: count the crates by tens, make a new crate if needed, then the rest.
-async function countHint(r) {
-  const crates = sideItems(".crate");
-  const gap = crates.length + (r.a % 10) + (r.b % 10) > 12 ? 300 : 460;
-  let total = 0, step = 0;
-  for (const c of crates) {
-    total += 10;
-    popItem(c, step++);
-    bubble(c, total);
-    await wait(gap);
+// Count every orange while the answer shows. Capped so big sums don't hold up the game.
+async function countHint() {
+  const items = [...sideItems(".crate"), ...sideItems(".fruit")];
+  const gap = Math.min(240, 2400 / Math.max(items.length, 1));
+  let total = 0;
+  for (let i = 0; i < items.length; i++) {
+    total += items[i].classList.contains("crate") ? 10 : 1;
+    popItem(items[i], i);
+    bubble(items[i], total);
+    await quick(gap);
   }
-  if (makesCrate(r.a, r.b) && !r.packed) {
-    const crate = await packFromBaskets(r);
-    total += 10;
-    popItem(crate, step++);
-    bubble(crate, total);
-    await wait(gap);
+}
+
+// After a miss or a timeout: show the right answer, then go to the next question or a nap.
+async function revealAndMoveOn(r) {
+  setMonkey("oops");
+  setProblem(r.a, r.b, r.answer);
+  for (const t of $("tiles").children) {
+    if (Number(t.querySelector("span").textContent) === r.answer) t.classList.add("right");
+    else if (!t.classList.contains("wrong")) t.classList.add("gone");
   }
-  for (const f of sideItems(".fruit")) {
-    if (f.style.visibility === "hidden") continue;
-    total++;
-    popItem(f, step++);
-    bubble(f, total);
-    await wait(gap);
-  }
+  const started = performance.now();
+  await countHint();
+  await quick(Math.max(600, 1800 - (performance.now() - started)));
+  if (!state.relaxed && state.leaves <= 0) return napTime();
+  for (const id of ["basketL", "basketR"]) { $(id).classList.remove("landed"); $(id).classList.add("leave"); }
+  await quick(450);
+  startRound();
 }
 
 async function choose(n, tile) {
   if (state.busy || state.paused) return;
   state.busy = true;
-  Sound.play("tap");
   const r = state.round;
-  if (n === r.answer) return correct(tile);
+  const raced = stopTimer();
+  Sound.play("tap");
+  if (n === r.answer) {
+    // Answered just in time: the toucan misses its snack.
+    if (raced >= 0.6) {
+      $("runnerPose").src = "img/toucan_wow.webp";
+      Sound.play("toucanMiss");
+    }
+    return correct(tile);
+  }
 
   tile.classList.add("wrong");
   tile.disabled = true;
   Sound.play("tryAgain");
   Sound.play("monkeyHmm");
   Sound.say(["tryAgainVo"]);
-  if (!r.missed) {
-    r.missed = true;
-    state.retry.push({ a: r.a, b: r.b, due: state.roundNo + randInt(3, 4) });
-    if (++state.wrongStreak >= CONFIG.wrongInARowToEase) {
-      state.wrongStreak = 0;
-      state.easyLeft = CONFIG.easyRounds;
-    }
-  }
-  setMonkey("oops");
-  await wait(1100);
-  await countHint(r);
-  setMonkey("think");
-  state.busy = false;
+  noteMiss(r);
+  loseLeaf();
+  await revealAndMoveOn(r);
 }
 
 function burst(x, y, count) {
@@ -431,7 +550,7 @@ function flyBanana() {
     { transform: "translate(860px,500px) scale(1) rotate(0)" },
     { transform: "translate(640px,180px) scale(1.25) rotate(-120deg)", offset: 0.45 },
     { transform: "translate(70px,20px) scale(.35) rotate(-340deg)" },
-  ], { duration: 950, easing: "cubic-bezier(.4,0,.5,1)" });
+  ], { duration: fastMode ? 140 : 950, easing: "cubic-bezier(.4,0,.5,1)" });
   anim.finished.catch(() => {}).then(() => {
     b.remove();
     state.bananas++;
@@ -459,7 +578,7 @@ async function correct(tile) {
   Sound.say(["greatJob"]);
   [...$("tiles").children].forEach((t) => { if (t !== tile) t.classList.add("gone"); });
   if (!r.missed) state.wrongStreak = 0;
-  await wait(280);
+  await quick(280);
   tile.classList.add("gone");
   // Show why the answer is right: the loose oranges make a new crate.
   if (makesCrate(r.a, r.b) && !r.packed) await packFromBaskets(r);
@@ -467,17 +586,17 @@ async function correct(tile) {
   setMonkey("happy");
   $("rays").classList.add("on");
   burst(724, 620, 8);
-  await wait(650);
+  await quick(650);
   flyBanana();
-  await wait(1000);
+  await quick(1000);
   // The bar only moves forward, and only for first-try answers.
   if (!r.missed) state.progress++;
   renderHud();
   saveProgress();
-  await wait(1250);
+  await quick(1250);
 
   for (const id of ["basketL", "basketR"]) { $(id).classList.remove("landed"); $(id).classList.add("leave"); }
-  await wait(450);
+  await quick(450);
   if (state.progress >= CONFIG.firstTryToFinishLevel) return levelComplete();
   startRound();
 }
@@ -520,9 +639,26 @@ function renderToggles() {
   $("toggleMusic").textContent = label("music", "Music");
   $("toggleSfx").textContent = label("sfx", "Sounds");
   $("toggleVoice").textContent = label("voice", "Voice");
+  $("toggleRelaxed").textContent = `Relaxed mode: ${state.relaxed ? "on" : "off"}`;
+  $("toggleFast").textContent = `Fast mode: ${fastMode ? "on" : "off"}`;
 }
 
 // Back to level 1, keeping the bananas. Asks for a second tap, so a stray tap loses nothing.
+function wakeUpAndRetry() {
+  state.progress = state.progress >= CHECKPOINT ? CHECKPOINT : 0;
+  state.levelRounds = 0;        // the two opening problems are the gentle ones
+  state.easyLeft = 0;
+  state.wrongStreak = 0;
+  state.retry = [];
+  state.leaves = rules().leaves;
+  saveProgress();
+  renderHud();
+  renderChallenge();
+  $("nap").hidden = true;
+  $("monkey").style.visibility = "";
+  startRound();
+}
+
 function startOver(button) {
   if (button.dataset.armed) {
     state.level = 1;
@@ -566,13 +702,29 @@ function wire() {
     state.levelRounds = 0;
     state.easyLeft = 0;
     state.retry = [];
+    state.leaves = rules().leaves;
     saveProgress();
     renderHud();
+    renderChallenge();
     setScene();
     $("levelup").hidden = true;
     $("monkey").style.visibility = "";
     $("levelup").querySelectorAll(".rain").forEach((b) => b.remove());
     startRound();
+  });
+  $("wakeUp").addEventListener("click", () => { Sound.play("toucan"); wakeUpAndRetry(); });
+  $("toggleFast").addEventListener("click", () => {
+    fastMode = !fastMode;
+    try { localStorage.setItem("jm-fast", fastMode ? "yes" : "no"); } catch {}
+    document.documentElement.classList.toggle("fast", fastMode);
+    renderToggles();
+  });
+  $("toggleRelaxed").addEventListener("click", () => {
+    state.relaxed = !state.relaxed;
+    try { localStorage.setItem("jm-relaxed", state.relaxed ? "yes" : "no"); } catch {}
+    if (state.relaxed) { stopTimer(); resetToucan(); }
+    renderChallenge();
+    renderToggles();
   });
   $("toucan").addEventListener("click", () => {
     Sound.play("toucan");
@@ -588,11 +740,13 @@ async function boot() {
   setScene();
   renderHud();
   renderToggles();
+  state.leaves = rules().leaves;
+  renderChallenge();
   wire();
   Sound.preload();
   const images = ["monkey_think", "monkey_oops", "monkey_happy", "banana", "basket_back", "basket_front",
     "tile_1", "tile_2", "tile_3", "friend_jump", "bg_temple", "bg_clearing",
-    "crate_full", "crate_empty", "crate_lid", ...CONFIG.fruits];
+    "crate_full", "crate_empty", "crate_lid", "toucan_hop", "toucan_eat", "toucan_wow", "monkey_nap", "branch", ...CONFIG.fruits];
   await Promise.all(images.map((n) => new Promise((done) => {
     const i = new Image();
     i.onload = i.onerror = done;

@@ -68,6 +68,21 @@ save(cut_light(load("Playful Monkey Hanging from a Leafy Branch.png"),
                holes=[(265, 739), (914, 276), (716, 200), (836, 163), (819, 305)]), "friend_hang", 560)
 save(cut_light(load("Cheerful Cartoon Toucan Perched.png"), holes=[(567, 952)]), "toucan", 520)
 
+# Timer toucan and the nap
+def largest_only(im):
+    solid = im[..., 3] > 128
+    lab, n = ni.label(solid)
+    sizes = ni.sum(solid, lab, range(1, n + 1))
+    out = im.copy()
+    out[..., 3][ni.binary_dilation(lab == np.argmax(sizes) + 1, iterations=3) == 0] = 0
+    return out
+
+save(largest_only(cut_light(load("Excited Toucan Mid-Hop.png"), holes=[(908, 466), (878, 521)])), "toucan_hop", 420)
+save(cut_light(load("Surprised Toucan with Exclamation Marks.png"), holes=[(919, 891), (837, 537), (804, 543)]), "toucan_wow", 420)
+save(cut_alpha(load("Cheerful Toucan Enjoying a Banana.png"), threshold=128, keep=4, holes=True), "toucan_eat", 420)
+save(cut_light(load("Sleeping Safari Monkey with Backpack.png"), holes=[(144, 852)]), "monkey_nap", 900)
+save(cut_light(load("Vibrant Jungle Branch with Vines.png")), "branch", 1400)
+
 # Objects
 save(cut_alpha(load("Glossy Orange with Leaf.png")), "fruit_orange", 280)
 save(cut_light(load("Glossy Ripe Banana Illustration.png")), "banana", 320)
