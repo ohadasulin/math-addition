@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Jungle Math</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Jungle Math">
+<meta name="theme-color" content="#1d3b1b">
+<link rel="apple-touch-icon" href="img/icon_180.png">
+<link rel="icon" href="img/icon_180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="backdrop"></div>
+<main id="stage">
+  <img id="bg" alt="">
+  <button id="toucan" class="plain" aria-label="Toucan"><img src="img/toucan.webp" alt=""></button>
+  <img id="hang" src="img/friend_hang.webp" alt="">
+
+  <div id="score"><img src="img/badge.webp" alt=""><span id="count">0</span></div>
+  <div id="plus">+1</div>
+
+  <div id="sign">
+    <i class="rope l"></i><i class="rope r"></i>
+    <img src="img/banner.webp" alt="">
+    <div id="problem" aria-live="polite"></div>
+    <div id="check"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+  </div>
+
+  <div id="progress" aria-label="Level progress">
+    <div id="segments"></div>
+    <img src="img/bar_frame.webp" alt="">
+  </div>
+  <button id="pause" class="plain" aria-label="Pause"><img src="img/btn_pause.webp" alt=""></button>
+
+  <div id="rays"></div>
+  <div class="basket" id="basketL"></div>
+  <div class="basket" id="basketR"></div>
+  <div id="pack"></div>
+  <div id="tiles"></div>
+  <img id="monkey" src="img/monkey_think.webp" alt="Monkey">
+  <div id="fx"></div>
+
+  <section id="start" class="overlay">
+    <img class="title-monkey" src="img/monkey_happy.webp" alt="">
+    <div class="board"><img src="img/banner.webp" alt=""><h1>Jungle Math</h1></div>
+    <button id="play" class="wood" disabled>Loading…</button>
+    <button class="wood small startOver" hidden>Start over</button>
+  </section>
+
+  <section id="paused" class="overlay" hidden>
+    <div class="board"><img src="img/banner.webp" alt=""><h2>Paused</h2></div>
+    <button id="resume" class="wood">Keep playing</button>
+    <button id="toggleMusic" class="wood small"></button>
+    <button id="toggleSfx" class="wood small"></button>
+    <button id="toggleVoice" class="wood small"></button>
+    <button class="wood small startOver">Start over</button>
+  </section>
+
+  <section id="levelup" class="overlay" hidden>
+    <img class="friend l" src="img/friend_jump.webp" alt="">
+    <img class="friend r" src="img/friend_jump.webp" alt="">
+    <img class="title-monkey" src="img/monkey_happy.webp" alt="">
+    <div class="board"><img src="img/banner.webp" alt=""><h2 id="levelText"></h2></div>
+    <button id="nextLevel" class="wood">Next level</button>
+  </section>
+</main>
+<div id="rotate"><img src="img/monkey_oops.webp" alt=""><p>Please turn your iPad sideways</p></div>
+<script src="sounds.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

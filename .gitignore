@@ -1,0 +1,4 @@
+.DS_Store
+# Raw art and unused audio stay local; the game uses img/ and the files below
+assets/*.png
+assets/music/*.wav
