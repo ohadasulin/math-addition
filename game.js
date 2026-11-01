@@ -5,7 +5,7 @@ const pick = (list) => list[randInt(0, list.length - 1)];
 
 const CONFIG = {
   firstTryToFinishLevel: 8,   // first-try answers that fill the bar
-  gentleOpening: 2,           // first problems of a level use the small numbers
+  gentleOpening: 2,           // first problems of a new skill, or after a nap, use small numbers
   reviewChance: 0.3,          // share of problems taken from easier levels
   wrongInARowToEase: 2,       // this many missed problems triggers easier ones...
   easyRounds: 3,              // ...for this many problems
@@ -17,18 +17,20 @@ const CONFIG = {
   fruits: ["fruit_orange"],   // add e.g. "fruit_apple" once img/fruit_apple.webp exists
 };
 
-// Seconds for each question (null = no toucan) and lucky leaves, by level.
-const LEVEL_RULES = [
-  [null, 6], [null, 6], [12, 6], [12, 6], [12, 6], [12, 5], [12, 5],
-  [12, 5], [12, 5], [14, 4], [14, 4], [16, 3], [14, 2],
-].map(([seconds, leaves]) => ({ seconds, leaves }));
+const LEAVES_PER_LEVEL = 3;
+// Seconds per question for each skill in SKILLS below (null = no toucan). A list makes one
+// level per entry: same questions, faster toucan, so a new skill never starts at full speed.
+const SKILL_SECONDS = [null, null, 12, 12, 12, 12, 12, 12, [30, 20, 12], [30, 22, 14], [35, 25, 14], [40, 28, 16], [45, 30, 14]];
+const LEVEL_RULES = SKILL_SECONDS.flatMap((entry, i) =>
+  (Array.isArray(entry) ? entry : [entry]).map((seconds, tier) =>
+    ({ skill: i + 1, tier, seconds, leaves: LEAVES_PER_LEVEL })));
 const rules = () => LEVEL_RULES[Math.min(state.level, LEVEL_RULES.length) - 1];
 const CHECKPOINT = 4;        // a nap never drops the bar below this once it's reached
 const EASED_EXTRA_SECONDS = 5;
 const TOUCAN_HOPS = 12;
 const TOUCAN_ROAD = 860;     // pixels from the start of the branch to the banana
 
-// Each level adds one idea. Every entry returns [a, b]; `gentle` means the smallest version.
+// Each skill adds one idea. Every entry returns [a, b]; `gentle` means the smallest version.
 const twoDigitNoCarry = (gentle) => {
   const tensA = randInt(1, gentle ? 2 : 6), tensB = randInt(1, gentle ? 1 : 8 - tensA);
   const onesA = randInt(1, gentle ? 3 : 8), onesB = randInt(1, gentle ? 3 : 9 - onesA);
@@ -39,7 +41,7 @@ const carryOnes = (gentle) => {       // two ones digits that make a new crate
   const a = randInt(2, 9);
   return [a, randInt(Math.max(2, 11 - a), 9)];
 };
-const LEVELS = [
+const SKILLS = [
   /* 1  to 5       */ (g) => { const a = randInt(1, g ? 2 : 4); return [a, randInt(1, (g ? 3 : 5) - a)]; },
   /* 2  to 7       */ (g) => { const a = randInt(1, g ? 3 : 5); return [a, randInt(Math.max(1, 4 - a), (g ? 5 : 7) - a)]; },
   /* 3  to 10      */ (g) => { const a = randInt(1, g ? 5 : 8); return [a, randInt(Math.max(1, 6 - a), (g ? 8 : 10) - a)]; },
@@ -70,31 +72,23 @@ const LEVELS = [
     return [tensA * 10 + x, tensB * 10 + y];
   },
   /* 13 up to 99   */ (g) => {
-    if (g) return LEVELS[11](true);
+    if (g) return SKILLS[11](true);
     const a = randInt(11, 79);
     return [a, randInt(11, 99 - a)];
   },
 ];
 
-// Where each fruit sits in the basket (percent of basket size), back row first.
-const FRUIT_LAYOUT = {
-  0: [],
-  1: [[37, 26]],
-  2: [[24, 26], [50, 26]],
-  3: [[11, 16], [37, 12], [62, 16]],
-  4: [[24, 8], [50, 8], [24, 30], [50, 30]],
-  5: [[11, 6], [37, 3], [62, 6], [24, 30], [50, 30]],
-  6: [[11, 6], [37, 3], [62, 6], [11, 30], [37, 32], [62, 30]],
-  7: [[6, 2], [28, 0], [50, 0], [72, 2], [17, 26], [39, 28], [61, 26]],
-  8: [[6, 2], [28, 0], [50, 0], [72, 2], [6, 26], [28, 28], [50, 28], [72, 26]],
-  9: [[2, 5], [21, 0], [40, 0], [59, 0], [78, 5], [12, 28], [31, 30], [50, 30], [69, 28]],
-};
+// The ten places in a crate (percent of crate size): back row, then front row, as in the art.
+const CRATE_SLOTS = [
+  ...[11, 26.5, 42, 57.5, 73].map((x) => [x, 13]),
+  ...[9, 25.5, 42, 58.5, 75].map((x) => [x, 30]),
+];
 
 const state = {
   bananas: 0, level: 1, progress: 0,
   busy: true, paused: false, round: null, last: "",
-  roundNo: 0, levelRounds: 0, wrongStreak: 0, easyLeft: 0, retry: [],
-  leaves: 0, relaxed: false, introShown: false,
+  roundNo: 0, wrongStreak: 0, easyLeft: 0, retry: [],
+  leaves: 0, relaxed: false, introShown: false, warmup: 0,
 };
 try {
   state.relaxed = localStorage.getItem("jm-relaxed") === "yes";
@@ -154,20 +148,20 @@ function pickRound() {
     const [{ a, b }] = state.retry.splice(due, 1);
     return { a, b, eased, answer: a + b, options: answerChoices(a, b) };
   }
-  const top = Math.min(state.level, LEVELS.length);
+  const top = rules().skill;
   let from = top, gentle = false;
   if (state.easyLeft > 0) {
     state.easyLeft--;
     from = Math.max(1, top - 1);
     gentle = true;
-  } else if (state.levelRounds < CONFIG.gentleOpening) {
+  } else if (state.warmup > 0) {
+    state.warmup--;
     gentle = true;
   } else if (top > 1 && Math.random() < CONFIG.reviewChance) {
     from = randInt(Math.max(1, top - 3), top - 1);
   }
-  state.levelRounds++;
   let a, b, tries = 0;
-  do { [a, b] = LEVELS[from - 1](gentle); } while (`${a}+${b}` === state.last && ++tries < 20);
+  do { [a, b] = SKILLS[from - 1](gentle); } while (`${a}+${b}` === state.last && ++tries < 20);
   state.last = `${a}+${b}`;
   return { a, b, eased, answer: a + b, options: answerChoices(a, b) };
 }
@@ -296,20 +290,133 @@ function setMonkey(mood) {
   m.className = mood === "think" ? "" : mood;
 }
 
-// One side of the problem: a crate for each ten, a basket for the rest.
+// One side of the problem: a full crate for each ten, then a part-full crate for the rest.
 function fillSide(el, n, fruit) {
   const tens = Math.floor(n / 10), ones = n % 10;
   const streaks = [12, 30, 48, 66].map((t) => `<i class="streak" style="top:${t}%"></i>`).join("");
-  const crates = tens ? `<div class="crates">${'<img class="crate" src="img/crate_full.webp" alt="">'.repeat(tens)}</div>` : "";
-  const fruits = FRUIT_LAYOUT[ones].map(([x, y]) =>
+  const full = '<img class="crate" src="img/crate_full.webp" alt="">'.repeat(tens);
+  const fruits = CRATE_SLOTS.slice(0, ones).map(([x, y]) =>
     `<img class="fruit" src="img/${fruit}.webp" alt="" style="left:${x}%;top:${y}%">`).join("");
-  const bin = ones || !tens
-    ? `<div class="bin${ones > 6 ? " dense" : ""}"><img class="layer" src="img/basket_back.webp" alt="">` +
-      `<div class="fruits">${fruits}</div><img class="layer" src="img/basket_front.webp" alt=""></div>`
+  const open = ones || !tens
+    ? `<div class="openCrate"><img src="img/crate_empty.webp" alt="">${fruits}</div>`
     : "";
-  el.className = `basket${tens ? " has-crates" : ""}`;
-  el.innerHTML = streaks + crates + bin;
-  el.setAttribute("aria-label", `${tens} crates and ${ones} oranges`);
+  el.className = "side";
+  el.innerHTML = `${streaks}<div class="crates">${full}${open}</div>`;
+  el.setAttribute("aria-label", `${n} oranges: ${tens} full crates and ${ones} more`);
+}
+
+// Dragging oranges between the big crates. The sum itself doesn't change.
+let drag = null;
+const CRATE_SLIDE_MS = 800; // the same in fast mode: the child is watching this one
+
+function placeFruits(crate) {
+  crate.querySelectorAll(".fruit").forEach((f, i) => {
+    f.style.left = `${CRATE_SLOTS[i][0]}%`;
+    f.style.top = `${CRATE_SLOTS[i][1]}%`;
+  });
+}
+
+function moveDragClone(e) {
+  const stage = $("stage").getBoundingClientRect();
+  const scale = stage.width / 1448;
+  drag.clone.style.left = `${(e.clientX - stage.left) / scale - drag.size / 2}px`;
+  drag.clone.style.top = `${(e.clientY - stage.top) / scale - drag.size / 2}px`;
+}
+
+function startDrag(e) {
+  const fruit = e.target.closest?.(".openCrate .fruit");
+  if (!fruit || drag || state.busy || state.paused) return;
+  e.preventDefault();
+  const size = stageBox(fruit).w;
+  const clone = document.createElement("img");
+  clone.className = "dragFruit";
+  clone.src = fruit.src;
+  clone.alt = "";
+  clone.style.width = `${size}px`;
+  $("fx").append(clone);
+  drag = { fruit, clone, size, id: e.pointerId };
+  fruit.style.visibility = "hidden";
+  moveDragClone(e);
+}
+
+function openCrateAt(x, y, except) {
+  return [...document.querySelectorAll(".openCrate")].find((crate) => {
+    if (crate === except) return false;
+    const r = crate.getBoundingClientRect();
+    return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+  });
+}
+
+function dropFruit(e) {
+  if (!drag || (e && e.pointerId !== drag.id)) return;
+  const { fruit, clone } = drag;
+  drag = null;
+  clone.remove();
+  fruit.style.visibility = "";
+  const from = fruit.closest(".openCrate");
+  const to = e && e.type === "pointerup" && !state.busy && !state.paused && from
+    ? openCrateAt(e.clientX, e.clientY, from) : null;
+  if (!to) return;
+
+  to.append(fruit);
+  bounce(fruit);
+  const count = to.querySelectorAll(".fruit").length;
+  Sound.play("pop", { rate: 2 ** (count * 1.5 / 12) });
+  placeFruits(to);
+  placeFruits(from);
+  let filled = null;
+  if (count === 10) {
+    const big = to.getBoundingClientRect();
+    const full = document.createElement("img");
+    full.className = "crate";
+    full.src = "img/crate_full.webp";
+    full.alt = "";
+    to.replaceWith(full);
+    filled = { el: full, rect: big };
+    Sound.play("crateThud");
+  }
+  tidyCrates(filled);
+}
+
+// Once at most one part-full crate has oranges: full crates left, that crate right.
+function tidyCrates(filled) {
+  const open = [...document.querySelectorAll(".openCrate")];
+  const loaded = open.filter((c) => c.querySelector(".fruit"));
+  if (loaded.length > 1) return;
+  const scale = $("stage").getBoundingClientRect().width / 1448;
+  const stage = $("stage").getBoundingClientRect();
+  open.filter((c) => !loaded.includes(c)).forEach((c) => {
+    const r = c.getBoundingClientRect();
+    const ghost = document.createElement("img");
+    ghost.src = "img/crate_empty.webp";
+    ghost.alt = "";
+    ghost.style.cssText = `position:absolute;pointer-events:none;left:${(r.left - stage.left) / scale}px;top:${(r.top - stage.top) / scale}px;width:${r.width / scale}px`;
+    $("fx").append(ghost);
+    c.remove();
+    ghost.animate([{ opacity: 1, transform: "none" }, { opacity: 0, transform: "scale(.6)" }],
+      { duration: CRATE_SLIDE_MS / 2, easing: "ease-in" }).onfinish = () => ghost.remove();
+  });
+
+  const left = $("sideL").querySelector(".crates");
+  const right = $("sideR").querySelector(".crates");
+  const crates = [...document.querySelectorAll(".side .crate")];
+  const moving = [...crates, ...loaded];
+  const before = moving.map((el) => (el === filled?.el ? filled.rect : el.getBoundingClientRect()));
+  left.append(...crates);
+  right.replaceChildren(...loaded);
+
+  moving.forEach((el, i) => {
+    const now = el.getBoundingClientRect();
+    const dx = (before[i].left - now.left) / scale, dy = (before[i].top - now.top) / scale;
+    const size = before[i].width / now.width;
+    if (dx || dy || size !== 1) el.animate(
+      [{ transformOrigin: "0 0", transform: `translate(${dx}px,${dy}px) scale(${size})` },
+        { transformOrigin: "0 0", transform: "none" }],
+      { duration: CRATE_SLIDE_MS, easing: "cubic-bezier(.45,.05,.3,1.1)" });
+  });
+  const oranges = loaded[0]?.querySelectorAll(".fruit").length || 0;
+  $("sideL").setAttribute("aria-label", `${crates.length} full crates`);
+  $("sideR").setAttribute("aria-label", `${oranges} oranges`);
 }
 
 function showTiles(options) {
@@ -325,7 +432,7 @@ function showTiles(options) {
   });
 }
 
-const sideItems = (selector) => [...$("basketL").querySelectorAll(selector), ...$("basketR").querySelectorAll(selector)];
+const sideItems = (selector) => [...$("sideL").querySelectorAll(selector), ...$("sideR").querySelectorAll(selector)];
 
 function bounce(el) {
   el.classList.remove("pop");
@@ -401,7 +508,7 @@ async function packCrate(sources) {
 
 // The first time crates appear: show ten oranges becoming one crate.
 async function crateIntro() {
-  $("basketL").innerHTML = $("basketR").innerHTML = "";
+  $("sideL").innerHTML = $("sideR").innerHTML = "";
   $("tiles").innerHTML = "";
   $("problem").className = "note";
   $("problem").textContent = "10 = 1 crate";
@@ -424,6 +531,7 @@ async function crateIntro() {
 
 async function startRound() {
   state.busy = true;
+  dropFruit();
   $("rays").classList.remove("on");
   $("check").classList.remove("show");
   $("tiles").innerHTML = "";
@@ -438,14 +546,14 @@ async function startRound() {
   const r = state.round = pickRound();
   const fruit = pick(CONFIG.fruits);
   setProblem(r.a, r.b);
-  fillSide($("basketL"), r.a, fruit);
-  fillSide($("basketR"), r.b, fruit);
+  fillSide($("sideL"), r.a, fruit);
+  fillSide($("sideR"), r.b, fruit);
   void $("stage").offsetWidth;
-  $("basketL").classList.add("fly");
-  $("basketR").classList.add("fly");
+  $("sideL").classList.add("fly");
+  $("sideR").classList.add("fly");
   Sound.play("whoosh");
   await quick(980);
-  for (const id of ["basketL", "basketR"]) { $(id).classList.remove("fly"); $(id).classList.add("landed"); }
+  for (const id of ["sideL", "sideR"]) { $(id).classList.remove("fly"); $(id).classList.add("landed"); }
 
   const items = [...sideItems(".crate"), ...sideItems(".fruit")];
   const gap = items.length > 10 ? 90 : 170;
@@ -468,7 +576,7 @@ function bubble(el, value) {
   b.addEventListener("animationend", () => b.remove());
 }
 
-async function packFromBaskets(r) {
+async function packLooseOranges(r) {
   r.packed = true;
   return packCrate(sideItems(".fruit").slice(0, 10));
 }
@@ -498,7 +606,7 @@ async function revealAndMoveOn(r) {
   await countHint();
   await quick(Math.max(600, 1800 - (performance.now() - started)));
   if (!state.relaxed && state.leaves <= 0) return napTime();
-  for (const id of ["basketL", "basketR"]) { $(id).classList.remove("landed"); $(id).classList.add("leave"); }
+  for (const id of ["sideL", "sideR"]) { $(id).classList.remove("landed"); $(id).classList.add("leave"); }
   await quick(450);
   startRound();
 }
@@ -581,7 +689,7 @@ async function correct(tile) {
   await quick(280);
   tile.classList.add("gone");
   // Show why the answer is right: the loose oranges make a new crate.
-  if (makesCrate(r.a, r.b) && !r.packed) await packFromBaskets(r);
+  if (state.level >= CONFIG.cratesFromLevel && sideItems(".fruit").length >= 10) await packLooseOranges(r);
 
   setMonkey("happy");
   $("rays").classList.add("on");
@@ -595,7 +703,7 @@ async function correct(tile) {
   saveProgress();
   await quick(1250);
 
-  for (const id of ["basketL", "basketR"]) { $(id).classList.remove("landed"); $(id).classList.add("leave"); }
+  for (const id of ["sideL", "sideR"]) { $(id).classList.remove("landed"); $(id).classList.add("leave"); }
   await quick(450);
   if (state.progress >= CONFIG.firstTryToFinishLevel) return levelComplete();
   startRound();
@@ -643,10 +751,28 @@ function renderToggles() {
   $("toggleFast").textContent = `Fast mode: ${fastMode ? "on" : "off"}`;
 }
 
+// Jump to any level, keeping the bananas. A fresh page cleanly stops whatever was on screen.
+function goToLevel(level) {
+  state.level = level;
+  state.progress = 0;
+  saveProgress();
+  location.replace(location.pathname);
+}
+
+function openLevelPicker() {
+  $("levelGrid").innerHTML = LEVEL_RULES.map((_, i) => {
+    const level = i + 1;
+    const current = level === Math.min(state.level, LEVEL_RULES.length) ? " current" : "";
+    return `<button class="levelBtn${current}" data-level="${level}" aria-label="Level ${level}">` +
+      `<img src="img/tile_${i % 3 + 1}.webp" alt=""><span>${level}</span></button>`;
+  }).join("");
+  $("levelPicker").hidden = false;
+}
+
 // Back to level 1, keeping the bananas. Asks for a second tap, so a stray tap loses nothing.
 function wakeUpAndRetry() {
   state.progress = state.progress >= CHECKPOINT ? CHECKPOINT : 0;
-  state.levelRounds = 0;        // the two opening problems are the gentle ones
+  state.warmup = CONFIG.gentleOpening;
   state.easyLeft = 0;
   state.wrongStreak = 0;
   state.retry = [];
@@ -677,6 +803,10 @@ function startOver(button) {
 
 function wire() {
   addEventListener("resize", fitStage);
+  $("stage").addEventListener("pointerdown", startDrag);
+  addEventListener("pointermove", (e) => { if (drag && e.pointerId === drag.id) moveDragClone(e); });
+  addEventListener("pointerup", dropFruit);
+  addEventListener("pointercancel", dropFruit);
   // Older Safari has no overflow:clip, so undo any scrolling a focused button might cause.
   $("stage").addEventListener("scroll", () => { $("stage").scrollTo(0, 0); });
   document.addEventListener("visibilitychange", () => {
@@ -687,7 +817,7 @@ function wire() {
   document.querySelectorAll(".startOver").forEach((b) => b.addEventListener("click", () => startOver(b)));
   $("play").addEventListener("click", () => {
     Sound.unlock();
-    Sound.setMusic(state.level);
+    Sound.setMusic(rules().skill);
     Sound.play("button");
     $("start").hidden = true;
     startRound();
@@ -697,12 +827,13 @@ function wire() {
   $("nextLevel").addEventListener("click", () => {
     Sound.play("button");
     state.level++;
-    Sound.setMusic(state.level);
+    Sound.setMusic(rules().skill);
     state.progress = 0;
-    state.levelRounds = 0;
     state.easyLeft = 0;
     state.retry = [];
     state.leaves = rules().leaves;
+    // A new skill opens gently; the faster levels of the same skill don't need to.
+    state.warmup = rules().tier === 0 ? CONFIG.gentleOpening : 0;
     saveProgress();
     renderHud();
     renderChallenge();
@@ -711,6 +842,15 @@ function wire() {
     $("monkey").style.visibility = "";
     $("levelup").querySelectorAll(".rain").forEach((b) => b.remove());
     startRound();
+  });
+  document.querySelectorAll(".chooseLevel").forEach((b) => b.addEventListener("click", () => {
+    Sound.play("button");
+    openLevelPicker();
+  }));
+  $("pickerBack").addEventListener("click", () => { Sound.play("button"); $("levelPicker").hidden = true; });
+  $("levelGrid").addEventListener("click", (e) => {
+    const button = e.target.closest(".levelBtn");
+    if (button) goToLevel(Number(button.dataset.level));
   });
   $("wakeUp").addEventListener("click", () => { Sound.play("toucan"); wakeUpAndRetry(); });
   $("toggleFast").addEventListener("click", () => {
@@ -741,10 +881,11 @@ async function boot() {
   renderHud();
   renderToggles();
   state.leaves = rules().leaves;
+  state.warmup = rules().tier === 0 ? CONFIG.gentleOpening : 0;
   renderChallenge();
   wire();
   Sound.preload();
-  const images = ["monkey_think", "monkey_oops", "monkey_happy", "banana", "basket_back", "basket_front",
+  const images = ["monkey_think", "monkey_oops", "monkey_happy", "banana",
     "tile_1", "tile_2", "tile_3", "friend_jump", "bg_temple", "bg_clearing",
     "crate_full", "crate_empty", "crate_lid", "toucan_hop", "toucan_eat", "toucan_wow", "monkey_nap", "branch", ...CONFIG.fruits];
   await Promise.all(images.map((n) => new Promise((done) => {

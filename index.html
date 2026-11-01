@@ -44,8 +44,8 @@
   <button id="pause" class="plain" aria-label="Pause"><img src="img/btn_pause.webp" alt=""></button>
 
   <div id="rays"></div>
-  <div class="basket" id="basketL"></div>
-  <div class="basket" id="basketR"></div>
+  <div class="side" id="sideL"></div>
+  <div class="side" id="sideR"></div>
   <div id="pack"></div>
   <div id="tiles"></div>
   <img id="monkey" src="img/monkey_think.webp" alt="Monkey">
@@ -55,18 +55,30 @@
     <img class="title-monkey" src="img/monkey_happy.webp" alt="">
     <div class="board"><img src="img/banner.webp" alt=""><h1>Jungle Math</h1></div>
     <button id="play" class="wood" disabled>Loading…</button>
-    <button class="wood small startOver" hidden>Start over</button>
+    <div class="menuRow">
+      <button class="wood small chooseLevel">Start from level</button>
+      <button class="wood small startOver" hidden>Start over</button>
+    </div>
   </section>
 
   <section id="paused" class="overlay" hidden>
     <div class="board"><img src="img/banner.webp" alt=""><h2>Paused</h2></div>
     <button id="resume" class="wood">Keep playing</button>
-    <button id="toggleMusic" class="wood small"></button>
-    <button id="toggleSfx" class="wood small"></button>
-    <button id="toggleVoice" class="wood small"></button>
-    <button id="toggleRelaxed" class="wood small"></button>
-    <button id="toggleFast" class="wood small"></button>
-    <button class="wood small startOver">Start over</button>
+    <div class="menuGrid">
+      <button id="toggleMusic" class="wood small"></button>
+      <button id="toggleSfx" class="wood small"></button>
+      <button id="toggleVoice" class="wood small"></button>
+      <button id="toggleRelaxed" class="wood small"></button>
+      <button id="toggleFast" class="wood small"></button>
+      <button class="wood small chooseLevel">Start from level</button>
+      <button class="wood small startOver wide">Start over</button>
+    </div>
+  </section>
+
+  <section id="levelPicker" class="overlay" hidden>
+    <div class="board"><img src="img/banner.webp" alt=""><h2>Pick a level</h2></div>
+    <div id="levelGrid"></div>
+    <button id="pickerBack" class="wood small">Back</button>
   </section>
 
   <section id="nap" class="overlay" hidden>

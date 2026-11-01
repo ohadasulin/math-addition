@@ -51,14 +51,6 @@ def save(im, name, max_side, box=None):
     pic.save(OUT / f"{name}.webp", quality=88, method=6)
     print(f"{name}: {pic.size} {(OUT / f'{name}.webp').stat().st_size // 1024}KB")
 
-def tint_wicker(im):
-    """Darken the bright wicker toward the mockup's brown so oranges stand out; leaves stay green."""
-    out = im.astype(float)
-    r, g = out[..., 0], out[..., 1]
-    wicker = g < r * 0.98
-    out[wicker, :3] *= [0.70, 0.60, 0.52]
-    return out.clip(0, 255).astype(np.uint8)
-
 # Characters
 save(cut_light(load("Thoughtful Safari Monkey Explorer.png"), holes=[(572, 1093)], lo=165, chroma=26), "monkey_think", 800)
 save(cut_light(load("Joyful Safari Monkey Adventure.png")), "monkey_happy", 900)
@@ -86,14 +78,6 @@ save(cut_light(load("Vibrant Jungle Branch with Vines.png")), "branch", 1400)
 # Objects
 save(cut_alpha(load("Glossy Orange with Leaf.png")), "fruit_orange", 280)
 save(cut_light(load("Glossy Ripe Banana Illustration.png")), "banana", 320)
-
-# Basket: both layers share one crop so they stay registered
-front = tint_wicker(cut_light(load("Woven Basket Front with Green Leaves.png")))
-back = tint_wicker(cut_light(load("Woven Basket Interior on Transparent Background.png")))
-b1, b2 = bbox(front), bbox(back)
-box = (min(b1[0], b2[0]), min(b1[1], b2[1]), max(b1[2], b2[2]), max(b1[3], b2[3]))
-save(front, "basket_front", 900, box)
-save(back, "basket_back", 900, box)
 
 # Crates: straight-edged, so cut by outline. All three share one crop to stay registered.
 def cut_polygon(im, points):

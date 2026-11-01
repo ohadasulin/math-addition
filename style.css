@@ -61,30 +61,28 @@ button { font:inherit; color:inherit; cursor:pointer; touch-action:manipulation;
 #pause { position:absolute; left:1344px; top:40px; width:82px; }
 #pause img { width:100%; }
 
-.basket { position:absolute; top:222px; width:430px; height:530px; z-index:2; display:flex; flex-direction:column; align-items:center; justify-content:center; }
-#basketL { left:208px; } #basketR { right:208px; }
+.side { position:absolute; top:222px; width:430px; height:530px; z-index:2; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+#sideL { left:208px; } #sideR { right:208px; }
 .crates { display:flex; flex-wrap:wrap; justify-content:center; width:430px; }
-.crate { width:140px; transform-origin:50% 80%; }
-.bin { position:relative; width:390px; height:261px; flex:none; }
-.basket.has-crates .bin { width:300px; height:200px; margin-top:-4px; }
-.bin .layer { position:absolute; inset:0; width:100%; height:100%; }
-.bin .fruits { position:absolute; inset:0; }
-.bin .fruit { position:absolute; width:26.7%; transform-origin:50% 80%; }
-.bin.dense .fruit { width:21%; }
+.crate { width:140px; flex:none; transform-origin:50% 80%; }
+.openCrate { position:relative; width:430px; flex:none; transform-origin:50% 80%; }
+.openCrate > img:first-child { width:100%; }
+.openCrate .fruit { position:absolute; width:17%; transform-origin:50% 80%; pointer-events:auto; touch-action:none; cursor:grab; }
+.dragFruit { position:absolute; z-index:9; pointer-events:none; filter:drop-shadow(0 8px 6px #0006); transform:scale(1.15); }
 #pack { position:absolute; inset:0; z-index:3; pointer-events:none; }
 .packer { position:absolute; left:609px; top:285px; width:230px; }
 .packer img { width:100%; }
 .packer .lid { position:absolute; left:0; top:0; opacity:0; }
 .packFruit { position:absolute; z-index:4; }
-.basket .streak { position:absolute; height:12px; width:310px; border-radius:8px; opacity:.85; transition:opacity .7s; }
-#basketL .streak { right:92%; background:linear-gradient(to left,#ffe38acc,#ffe38a00); }
-#basketR .streak { left:92%; background:linear-gradient(to right,#ffe38acc,#ffe38a00); }
-.basket.landed .streak { opacity:0; }
-#basketL.fly { animation:flyL .95s cubic-bezier(.2,.8,.3,1.08) both; }
-#basketR.fly { animation:flyR .95s cubic-bezier(.2,.8,.3,1.08) both; }
-.basket.landed { animation:float 3.2s ease-in-out infinite; }
-#basketL.leave { animation:leaveL .45s ease-in both; }
-#basketR.leave { animation:leaveR .45s ease-in both; }
+.side .streak { position:absolute; height:12px; width:310px; border-radius:8px; opacity:.85; transition:opacity .7s; }
+#sideL .streak { right:92%; background:linear-gradient(to left,#ffe38acc,#ffe38a00); }
+#sideR .streak { left:92%; background:linear-gradient(to right,#ffe38acc,#ffe38a00); }
+.side.landed .streak { opacity:0; }
+#sideL.fly { animation:flyL .95s cubic-bezier(.2,.8,.3,1.08) both; }
+#sideR.fly { animation:flyR .95s cubic-bezier(.2,.8,.3,1.08) both; }
+.side.landed { animation:float 3.2s ease-in-out infinite; }
+#sideL.leave { animation:leaveL .45s ease-in both; }
+#sideR.leave { animation:leaveR .45s ease-in both; }
 @keyframes flyL { from{transform:translateX(-720px) scale(.28)} to{transform:none} }
 @keyframes flyR { from{transform:translateX(720px) scale(.28)} to{transform:none} }
 @keyframes leaveL { to{transform:translate(-720px,-60px) scale(.5);opacity:0} }
@@ -146,8 +144,8 @@ button { font:inherit; color:inherit; cursor:pointer; touch-action:manipulation;
 @media (orientation:portrait) { #rotate { display:flex; } }
 
 /* Developer fast mode (?fast) */
-.fast #basketL.fly, .fast #basketR.fly { animation-duration:.15s; }
-.fast #basketL.leave, .fast #basketR.leave { animation-duration:.07s; }
+.fast #sideL.fly, .fast #sideR.fly { animation-duration:.15s; }
+.fast #sideL.leave, .fast #sideR.leave { animation-duration:.07s; }
 .fast .tile { animation-duration:.06s; animation-delay:0s !important; }
 .fast .tile.wrong { animation-duration:.1s; }
 .fast .tile.gone { animation-duration:.04s; }
@@ -159,3 +157,16 @@ button { font:inherit; color:inherit; cursor:pointer; touch-action:manipulation;
 .fast #plus.show { animation-duration:.3s; }
 .fast #score.bump { animation-duration:.12s; }
 .fast .spark { animation-duration:.2s; animation-delay:0s !important; }
+
+.menuRow { display:flex; gap:20px; }
+.menuGrid { display:grid; grid-template-columns:1fr 1fr; gap:18px 22px; }
+.menuGrid .wide { grid-column:1 / -1; justify-self:center; }
+#levelPicker { background:#0c2a10e0; gap:14px; }
+#levelPicker .board { width:600px; }
+#levelPicker .board h2 { font-size:76px; }
+#levelGrid { display:grid; grid-template-columns:repeat(6,150px); gap:4px 18px; justify-content:center; }
+.levelBtn { position:relative; width:150px; height:146px; border:0; padding:0; background:none; }
+.levelBtn img { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; }
+.levelBtn span { position:absolute; inset:6px 0 0; display:flex; align-items:center; justify-content:center; font-size:66px; }
+.levelBtn:active { transform:scale(.94); }
+.levelBtn.current { filter:drop-shadow(0 0 14px #ffe14d); }
